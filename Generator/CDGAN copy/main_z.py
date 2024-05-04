@@ -69,6 +69,7 @@ def arguments():
     parser.add_argument("metricType",type=float) #This defines the length of our conditioning vector
     parser.add_argument("latent",type=int) #This defines the length of our conditioning vector
     parser.add_argument("spectra_length",type=int) #This defines the length of our conditioning vector
+    parser.add_argument("output_folder",type=str)
 
     parser.run_name = "GAN Training"
     parser.epochs = 100
@@ -79,10 +80,11 @@ def arguments():
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
     parser.learning_rate =5e-5
-    parser.condition_len = 6 #Incliuding 3 top frequencies con one-hot-encoding
+    parser.condition_len = 5 #Incliuding 3 top frequencies con one-hot-encoding
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
-    parser.latent=200 #this is to be modified when training for different metrics.
+    parser.latent=105 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
+    parser.output_folder="output_zprod/"
 
     categories=["box", "circle", "cross"]
 
@@ -128,6 +130,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 # For each epoch
     df = pd.read_csv("out.csv")
     
+
 
     dataloader = utils.get_data_with_labels(parser.image_size,parser.image_size,1, 
                                             boxImagesPath,parser.batch_size,
@@ -208,7 +211,12 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
                     fake = netG(testTensor).detach().cpu()
 
-                    save_image(fake, "output/"+str(epoch)+"_"+str(iters)+'.png')
+                    """Saving Data"""
+
+                    if not os.path.exists(parser.output_folder):
+                        os.makedirs(parser.output_folder)
+
+                    save_image(fake, parser.output_folder+str(epoch)+"_"+str(iters)+'.png')
 
                 img_list.append(vutils.make_grid(fake,nrow=10, padding=2, normalize=True))
 
@@ -221,7 +229,9 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
             torch.save(netG, 'CGAN_Model/model' + 'netG' + str(epoch) + '.pt')
             torch.save(netD, 'CGAN_Model/model' + 'netD' + str(epoch) + '.pt')
-        
+    
+        schedulerD.step()
+        schedulerG.step()
     
     return G_losses,D_losses,iter_array,real_scores,fake_scores
             
@@ -310,10 +320,10 @@ def prepare_data(names, device,df,classes,classes_types,substrate_encoder, mater
             latent_tensor=torch.rand(parser.latent)
             
             """multiply noise and labels to get a single vector"""
-            #tensor1=torch.mul(labels.to(device),latent_tensor.to(device) )
+            tensor1=torch.mul(labels.to(device),latent_tensor.to(device) )
     
             """concat noise and labels adjacent"""
-            tensor1 = torch.cat((conditional_data.to(device),tensorA.to(device),latent_tensor.to(device),)) #concat side
+            #tensor1 = torch.cat((conditional_data.to(device),tensorA.to(device),latent_tensor.to(device),)) #concat side
 
             #un vector que inclue
             #datos desde el dataset y otros datos aleatorios latentes.
@@ -369,7 +379,7 @@ def set_conditioning_one_hot(df,name,target,categories,band_name,top_freqs,subst
          surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight]),band,top_freqs
          """
 
-    values_array = torch.cat((surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight]),band,top_freqs),0) #concat side
+    values_array = torch.cat((surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight])),0) #concat side
     """ Values array solo pouede llenarse con n+umero y no con textos"""
     # values_array = torch.Tensor(values_array)
     return values_array
@@ -412,7 +422,7 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         sustratoHeight= sustratoHeight[-1]
         
 
-    values_array=torch.Tensor([geometry,surfacetype,materialconductor,materialsustrato,sustratoHeight,band])
+    values_array=torch.Tensor([surfacetype,materialconductor,materialsustrato,sustratoHeight,band])
     
     """if wanting to add top frequencies to the conditions"""
     #values_array = torch.cat((values_array,top_freqs),0) #concat side
@@ -509,7 +519,12 @@ def main():
     trainer = Stack.Trainer(parser)
 
     # Sizes for discrimnator and generator
-    input_size=parser.spectra_length+parser.condition_len+parser.latent
+    """Z product"""
+    input_size=parser.spectra_length+parser.condition_len
+    
+    """this for Z concat"""
+    #input_size=parser.spectra_length+parser.condition_len+parser.latent
+
     generator_mapping_size=parser.image_size
     output_channels=3
 
@@ -541,7 +556,7 @@ def main():
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.95)
 
 
-    date="_GAN_Bands_2May_100epc_64_6conds_zcat"
+    date="_GAN_Bands_4May_100epc_64_13conds_zprod"
 
     G_losses,D_losses,iter_array,real_scores,fake_scores=train(opt_D,opt_G,
                                                             schedulerD,schedulerG,
@@ -559,19 +574,19 @@ def main():
     torch.save(netG.state_dict(), 'NETGModelTM_abs_'+date+'.pth')
 
     try:
-        np.savetxt('output/loss_Train_TM_NETG_'+date+'.out', G_losses, delimiter=',')
+        np.savetxt(parser.ouput_folder+'loss_Train_TM_NETG_'+date+'.out', G_losses, delimiter=',')
     except:
-        np.savetxt('output/loss_Train_TM_NETG_'+date+'.out', [], delimiter=',')
+        np.savetxt(parser.ouput_folder+'loss_Train_TM_NETG_'+date+'.out', [], delimiter=',')
 
     try:
-        np.savetxt('output/acc_Train_TM_NETD_'+date+'.out', D_losses, delimiter=',')
+        np.savetxt(parser.ouput_folder+'acc_Train_TM_NETD_'+date+'.out', D_losses, delimiter=',')
     except:
-        np.savetxt('output/acc_Train_TM_NETD_'+date+'.out', [], delimiter=',')
+        np.savetxt(parser.ouput_folder+'acc_Train_TM_NETD_'+date+'.out', [], delimiter=',')
     
     try:
-        np.savetxt('output/loss_Valid_TM_iterArray'+date+'.out', iter_array, delimiter=',')
+        np.savetxt(parser.ouput_folder+'loss_Valid_TM_iterArray'+date+'.out', iter_array, delimiter=',')
     except:
-        np.savetxt('output/loss_Valid_TM_iterArray'+date+'.out', [], delimiter=',')
+        np.savetxt(parser.ouput_folder+'loss_Valid_TM_iterArray'+date+'.out', [], delimiter=',')
     
     # try:
     #     np.savetxt('output/acc_val_'+date+'.out', acc_val, delimiter=',')
