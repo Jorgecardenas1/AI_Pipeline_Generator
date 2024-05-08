@@ -73,16 +73,16 @@ def arguments():
 
     parser.run_name = "GAN Training"
     parser.epochs = 100
-    parser.batch_size = 50
+    parser.batch_size = 100
     parser.workers=1
     parser.gpu_number=1
     parser.image_size = 64
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
     parser.learning_rate =5e-5
-    parser.condition_len = 5 #Incliuding 3 top frequencies con one-hot-encoding
+    parser.condition_len = 6 #Incliuding 3 top frequencies con one-hot-encoding
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
-    parser.latent=105 #this is to be modified when training for different metrics.
+    parser.latent=106 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
     parser.output_folder="output_zprod/"
 
@@ -422,7 +422,7 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         sustratoHeight= sustratoHeight[-1]
         
 
-    values_array=torch.Tensor([surfacetype,materialconductor,materialsustrato,sustratoHeight,band])
+    values_array=torch.Tensor([geometry,surfacetype,materialconductor,materialsustrato,sustratoHeight,band])
     
     """if wanting to add top frequencies to the conditions"""
     #values_array = torch.cat((values_array,top_freqs),0) #concat side
@@ -556,7 +556,7 @@ def main():
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.95)
 
 
-    date="_GAN_Bands_4May_100epc_64_13conds_zprod"
+    date="_GAN_Bands_8May_100epc_64_6conds_zprod"
 
     G_losses,D_losses,iter_array,real_scores,fake_scores=train(opt_D,opt_G,
                                                             schedulerD,schedulerG,
