@@ -72,8 +72,8 @@ def arguments():
     parser.add_argument("output_folder",type=str)
 
     parser.run_name = "GAN Training"
-    parser.epochs = 100
-    parser.batch_size = 100
+    parser.epochs = 110
+    parser.batch_size = 50
     parser.workers=1
     parser.gpu_number=1
     parser.image_size = 64
@@ -84,12 +84,12 @@ def arguments():
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=106 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_zprod/"
+    parser.output_folder="output_zprod_106/"
 
     categories=["box", "circle", "cross"]
 
 
-#From the DCGAN paper, the authors specify that all model weights shall be randomly initialized
+#From the DCGAN paper, the authors specify that all smodel weights shall be randomly initialized
 #from a Normal distribution with mean=0, stdev=0.02.
 #The weights_init function takes an initialized model as input and reinitializes all convolutional,
 #convolutional-transpose, and batch normalization layers to meet this criteria.
@@ -189,8 +189,6 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                     epoch+1, parser.epochs, loss_g, loss_d, D_x, D_G_z1,D_G_z2))
             
 
-
-
             # Validation by generating images
             if (iters % 1000 == 0) or ((epoch == parser.epochs-1) and (i == len(dataloader)-1)):
                 with torch.no_grad():
@@ -216,19 +214,20 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                     if not os.path.exists(parser.output_folder):
                         os.makedirs(parser.output_folder)
 
+
                     save_image(fake, parser.output_folder+str(epoch)+"_"+str(iters)+'.png')
 
                 img_list.append(vutils.make_grid(fake,nrow=10, padding=2, normalize=True))
 
             iters += 1
 
-        if epoch % 1 == 0:
+        if epoch % 10 == 0:
             ##Guarda el modelo en el directorio cada 50 epocas
-            if not os.path.exists('CGAN_Model'):
-                os.makedirs('CGAN_Model')
+            if not os.path.exists(parser.output_folder+'/model'):
+                os.makedirs(parser.output_folder+'/model')
 
-            torch.save(netG, 'CGAN_Model/model' + 'netG' + str(epoch) + '.pt')
-            torch.save(netD, 'CGAN_Model/model' + 'netD' + str(epoch) + '.pt')
+            torch.save(netG, parser.output_folder+'/model' + 'netG' + str(epoch) + '.pt')
+            torch.save(netD, parser.output_folder+'/model' + 'netD' + str(epoch) + '.pt')
     
         schedulerD.step()
         schedulerG.step()
@@ -556,7 +555,7 @@ def main():
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.95)
 
 
-    date="_GAN_Bands_8May_100epc_64_6conds_zprod"
+    date="_GAN_Bands_10May_110epc_64_6conds_zprod"
 
     G_losses,D_losses,iter_array,real_scores,fake_scores=train(opt_D,opt_G,
                                                             schedulerD,schedulerG,
@@ -574,19 +573,19 @@ def main():
     torch.save(netG.state_dict(), 'NETGModelTM_abs_'+date+'.pth')
 
     try:
-        np.savetxt(parser.ouput_folder+'loss_Train_TM_NETG_'+date+'.out', G_losses, delimiter=',')
+        np.savetxt(parser.output_folder+'loss_Train_TM_NETG_'+date+'.out', G_losses, delimiter=',')
     except:
-        np.savetxt(parser.ouput_folder+'loss_Train_TM_NETG_'+date+'.out', [], delimiter=',')
+        np.savetxt(parser.output_folder+'loss_Train_TM_NETG_'+date+'.out', [], delimiter=',')
 
     try:
-        np.savetxt(parser.ouput_folder+'acc_Train_TM_NETD_'+date+'.out', D_losses, delimiter=',')
+        np.savetxt(parser.output_folder+'acc_Train_TM_NETD_'+date+'.out', D_losses, delimiter=',')
     except:
-        np.savetxt(parser.ouput_folder+'acc_Train_TM_NETD_'+date+'.out', [], delimiter=',')
+        np.savetxt(parser.output_folder+'acc_Train_TM_NETD_'+date+'.out', [], delimiter=',')
     
     try:
-        np.savetxt(parser.ouput_folder+'loss_Valid_TM_iterArray'+date+'.out', iter_array, delimiter=',')
+        np.savetxt(parser.output_folder+'loss_Valid_TM_iterArray'+date+'.out', iter_array, delimiter=',')
     except:
-        np.savetxt(parser.ouput_folder+'loss_Valid_TM_iterArray'+date+'.out', [], delimiter=',')
+        np.savetxt(parser.output_folder+'loss_Valid_TM_iterArray'+date+'.out', [], delimiter=',')
     
     # try:
     #     np.savetxt('output/acc_val_'+date+'.out', acc_val, delimiter=',')
