@@ -139,7 +139,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
     
     vdataloader = utils.get_data_with_labels(parser.image_size, parser.image_size,1,
                                             validationImages,parser.batch_size, 
-                                            drop_last=True,
+                                            drop_last=False,
                                             filter="30-40")
 
     for epoch in range(parser.epochs):
@@ -422,8 +422,7 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         
         sustratoHeight= json.loads(row["paramValues"].values[0])
         sustratoHeight= sustratoHeight[-2]
-        
-        substrateWidth = sustratoHeight[-1] # from the simulation crosses have this additional free param
+        substrateWidth = json.loads(row["paramValues"].values[0])[-1] # from the simulation crosses have this additional free param
     else:
     
         sustratoHeight= json.loads(row["paramValues"].values[0])
