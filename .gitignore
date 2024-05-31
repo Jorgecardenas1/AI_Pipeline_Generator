@@ -10,4 +10,3 @@
 /Predictor/CNN_multitarget_server/*.csv
 *.pth
 *.pt
-*.png
