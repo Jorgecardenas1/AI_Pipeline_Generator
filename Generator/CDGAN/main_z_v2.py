@@ -1,5 +1,5 @@
-"""Version 1: Z conditioning with product or concat
-Version 2: Conditioning with peaks and FWHM"""
+"""Version 1: Z conditioning with product or concat- initial GAN architechture 
+Version 2: Conditioning with peaks and FWHM GAN V2 Arquitechture"""
 
 import sys
 import os
@@ -88,12 +88,12 @@ def arguments():
     parser.image_size = 64
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
-    parser.learning_rate =2e-4
-    parser.condition_len = 16 
+    parser.learning_rate =1e-4
+    parser.condition_len = 12 
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
-    parser.latent=316 #this is to be modified when training for different metrics.
+    parser.latent=312 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_zprod_11Ag_lowswitch_FWHM/"
+    parser.output_folder="output_zprod_25Ag_ganV2_Nosiwtch/"
     parser.GAN_version=True
 
     categories=["box", "circle", "cross"]
@@ -176,7 +176,6 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
             if parser.GAN_version:
                 label_conditions = torch.stack(labels).type(torch.float).to(device) #Discrminator Conditioning spectra
-                #label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim = 1)
 
                 noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
                 label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
@@ -280,6 +279,10 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
         series=name.split('_')[-2]#
         band_name=name.split('_')[-1].split('.')[0]#
         batch=name.split('_')[4]
+        version_batch=1
+        if batch=="v2":
+            version_batch=2
+            batch=name.split('_')[5]
         #print(files_name)
         for file_name in glob.glob(DataPath+batch+'/files/'+'/'+parser.metricType+'*'+series+'.csv'): 
             #loading the absorption data
@@ -295,16 +298,21 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
                 train=train.loc[101:200]
 
             elif Bands[str(band_name)]==2:
-                
-                train=train.loc[201:300]
-
+                if version_batch==1:
+                    train=train.loc[201:300]
+                else:
+                    train=train.loc[1:100]
             elif Bands[str(band_name)]==3:
-                
-                train=train.loc[301:400]
+                if version_batch==1:
+                    train=train.loc[301:400]
+                else:
+                    train=train.loc[101:200]
 
             elif Bands[str(band_name)]==4:
-                
-                train=train.loc[401:500]
+                if version_batch==1: 
+                    train=train.loc[401:500]
+                else:
+                    train=train.loc[201:300]
 
             elif Bands[str(band_name)]==5:
 
@@ -439,6 +447,9 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
     #splitting file names to get some parameters
     series=name.split('_')[-2]
     batch=name.split('_')[4]
+    if batch=="v2":
+        batch=name.split('_')[5]    
+        
     iteration=series.split('-')[-1]
     row=df[(df['sim_id']==batch) & (df['iteration']==int(iteration))  ]
     #print(iteration)
@@ -474,7 +485,7 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         substrateWidth = 5 # 5 mm size
         
 
-    values_array=torch.Tensor([geometry,surfacetype,materialconductor,materialsustrato,sustratoHeight,substrateWidth ,band])
+    values_array=torch.Tensor([geometry,substrateWidth ,band])
     
     """if wanting to add top frequencies to the conditions"""
     #values_array = torch.cat((values_array,top_freqs),0) #concat side
@@ -492,7 +503,6 @@ def train_discriminator(modelD,modelG,criterion,real_images, opt_d,label_conditi
      # Forward pass del batch real a través de NetD
      #noise just creates added channels conditioning the real image
 
-    
     output = modelD.forward(real_images,label_conditions,batch_size).view(-1)
 
     # Calcula la perdida de all-real batch
@@ -544,8 +554,8 @@ def train_generator(opt_g,net_g, net_d,batch_size,criterion,fakes,noise2, label,
 
     label.fill_(real_label)
     """Testing swapping fake and real labels for generator"""
-    if random.uniform(0.0,1)<0.1:
-        label.fill_(fake_label)
+    #if random.uniform(0.0,1)<0.1:
+    #    label.fill_(fake_label)
 
      #saying fake label
 
@@ -646,14 +656,13 @@ def main():
 
     # Setup Adam optimizers for both G and D
     #opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.5, 0.999),weight_decay=1e-5)
-    opt_D = optimizer.SGD(netD.parameters(), lr=trainer.learning_rate, momentum=0.9)
+    opt_D = optimizer.SGD(netD.parameters(), lr=trainer.learning_rate, momentum=0.7)
     opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.5, 0.999))
-    schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=0.95)
-    schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.95)
-
-
+    schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=1.00004)
+    schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=1.00004)
+    
     #naming the output file
-    date="_GANV2_FWHM_lowswitch_11Ag-lr1-4_100epc_64"
+    date="_GANV2_FWHM_Noswitch_25Ag-lr1-4"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,
