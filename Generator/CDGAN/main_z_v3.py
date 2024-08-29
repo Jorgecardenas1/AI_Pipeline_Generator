@@ -25,7 +25,6 @@ import torch.optim as optimizer
 from torchsummary import summary
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
-from torcheval.metrics import BinaryAccuracy
 from torchvision.utils import save_image
 
 from torchvision import datasets

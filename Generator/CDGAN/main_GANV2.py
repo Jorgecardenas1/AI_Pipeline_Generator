@@ -24,7 +24,6 @@ import torch.optim as optimizer
 from torchsummary import summary
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
-from torcheval.metrics import BinaryAccuracy
 from torchvision.utils import save_image
 
 from torchvision import datasets
@@ -55,7 +54,7 @@ validationImages="../../../data/MetasufacesData/testImages/"
 Substrates={"Rogers RT/duroid 5880 (tm)":0, "other":1}
 Materials={"copper":0,"pec":1}
 Surfacetypes={"Reflective":0,"Transmissive":1}
-TargetGeometries={"circ":0,"box":1, "cross":2}
+TargetGeometries={"circ":[1,0,0],"box":[0,1,0], "cross":[0,0,1]}
 Bands={"30-40":0,"40-50":1, "50-60":2,"60-70":3,"70-80":4, "80-90":5}
 
 
@@ -79,21 +78,21 @@ def arguments():
     parser.add_argument("GAN_version",type=bool)
 
     parser.run_name = "GAN Training"
-    parser.epochs = 200
+    parser.epochs = 150
     parser.batch_size = 64
     parser.workers=1
     parser.gpu_number=0
     parser.output_channels=3
     parser.discriminator_channels=3
-    parser.image_size = 64
+    parser.image_size = 128
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
     parser.learning_rate =1e-4
-    parser.condition_len = 12 
+    parser.condition_len = 15 
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
-    parser.latent=312 #this is to be modified when training for different metrics.
+    parser.latent=115 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_zprod_25Ag_ganV2_Nosiwtch/"
+    parser.output_folder="output_28Ag_ganV2_128/"
     parser.GAN_version=True
 
     categories=["box", "circle", "cross"]
@@ -131,26 +130,25 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
     # convenciones sobre algo real o fake
     # This is required for the discriminator training
-    real_label = random.uniform(0.9,1.0)
-    fake_label = random.uniform(0.0,0.1)
+    real_label = random.uniform(0.9,1.1)
+    fake_label = random.uniform(0.0,0.2)
 
     # Load training data set
     df = pd.read_csv("out.csv")
     
-
-    
-
-    for epoch in range(parser.epochs):
-        
-        dataloader = utils.get_data_with_labels(parser.image_size,parser.image_size,1, 
+    dataloader = utils.get_data_with_labels(parser.image_size,parser.image_size,1, 
                                             boxImagesPath,parser.batch_size,
                                             drop_last=True,
                                             filter="30-40")#filter disabled
     
-        vdataloader = utils.get_data_with_labels(parser.image_size, parser.image_size,1,
+    vdataloader = utils.get_data_with_labels(parser.image_size, parser.image_size,1,
                                             validationImages,parser.batch_size, 
                                             drop_last=False,
                                             filter="30-40")
+    
+
+    for epoch in range(parser.epochs):
+        
         # For each batch in the dataloader
         # netG.train()
 
@@ -160,12 +158,15 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             # y otras de ruido en la parte latente  .
             netG.train()
             inputs, classes, names, classes_types = data
-            #print(names)
+
+
             #sending to CUDA
             inputs = inputs.to(device) #images 
             classes = classes.to(device) #classes
             
-            """Prepare Data"""
+            """Prepare Data
+            labels - a full vector with conditions and spectra
+            noise Z"""
             _, labels, noise,_ = prepare_data(names, device,df,classes,classes_types,
                                                              substrate_encoder,
                                                              materials_encoder,
@@ -175,11 +176,14 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
 
             if parser.GAN_version:
+
                 label_conditions = torch.stack(labels).type(torch.float).to(device) #Discrminator Conditioning spectra
 
                 noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
                 label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
-                
+
+                label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
+
                 # Train discriminator
 
                 loss_d,  D_x, D_G_z1, fakes = train_discriminator(netD,netG,criterion,inputs, opt_D, label_conditions,noise, label, parser.batch_size,real_label,fake_label)
@@ -189,20 +193,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
             else:
 
-                noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
-                conditions = torch.stack(labels).type(torch.float).to(device) #Discrminator Conditioning spectra
-                
-                #conditions = torch.nn.functional.normalize(conditions, p=2.0, dim = 1)
-
-                label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
-                #label_real = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
-
-                # Train discriminator
-
-                loss_d,  D_x, D_G_z1, fakes = train_discriminator(netD,netG,criterion,inputs, opt_D, conditions,noise, label, parser.batch_size,real_label,fake_label)
-
-                # Train generator
-                loss_g, D_G_z2  = train_generator(opt_G,netG, netD,parser.batch_size,criterion,fakes,conditions, label,real_label,fake_label)
+                pass
 
             # Record losses & scores
             G_losses.append(loss_g)
@@ -236,14 +227,16 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                                                                                  bands_encoder)
                     label_conditions = torch.stack(labels).type(torch.float).to(device) #Discrminator Conditioning spectra
                     testTensor = noise_val.type(torch.float).to(device)
-                   
+
+                    label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
+                    
                     if parser.GAN_version:
                         fake = netG(label_conditions,testTensor,parser.batch_size).detach().cpu()
 
                     else:
-                        fake = netG(testTensor).detach().cpu()
-
+                        pass
                     """Saving Data"""
+
 
                     if not os.path.exists(parser.output_folder):
                         os.makedirs(parser.output_folder)
@@ -251,7 +244,6 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
                     save_image(fake, parser.output_folder+str(epoch)+"_"+str(iters)+'.png')
 
-                #img_list.append(vutils.make_grid(fake,nrow=10, padding=2, normalize=True))
 
             iters += 1
 
@@ -270,7 +262,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             
 
 def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, materials_encoder,surfaceType_encoder,TargetGeometries_encoder,bands_encoder):
-    bands_batch,array1,array2=[],[],[]
+    bands_batch,array1,array_labels=[],[],[]
 
     noise = torch.Tensor()
 
@@ -283,7 +275,8 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
         if batch=="v2":
             version_batch=2
             batch=name.split('_')[5]
-        #print(files_name)
+
+
         for file_name in glob.glob(DataPath+batch+'/files/'+'/'+parser.metricType+'*'+series+'.csv'): 
             #loading the absorption data
             train = pd.read_csv(file_name)
@@ -357,90 +350,30 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
 
 
             #labels_peaks=torch.cat((torch.from_numpy(data),torch.from_numpy(fre_peaks)),0)
+            """this has 3 peaks and its frequencies-9 entries"""
             labels_peaks=torch.cat((torch.from_numpy(data),torch.from_numpy(fre_peaks),torch.from_numpy(results_half)),0)
 
-            """6 conditions no one-hot-encoding"""
+            """This has geometric params 6 entries"""
             conditional_data = set_conditioning(df,name,classes[idx],
                                                 classes_types[idx],
                                                 Bands[str(band_name)],
                                                 None)
 
-            tensorA = torch.from_numpy(values) #Just have spectra profile
+            tensorA = torch.from_numpy(values) #full spectra profile 100 entries
             labels = torch.cat((conditional_data.to(device),labels_peaks.to(device),tensorA.to(device))) #concat side
             bands_batch.append(band_name)
-            array2.append(labels) # to create stack of tensors
+            array_labels.append(labels) # to create stack of tensors
 
-            
             latent_tensor=torch.randn(1,parser.latent)
 
             if parser.GAN_version:
-
                 noise = torch.cat((noise.to(device),latent_tensor.to(device)))
             else:
-            
-                
-                """multiply noise and labels to get a single vector"""
-                tensor1=torch.mul(labels.to(device),latent_tensor.to(device) )
-        
-                """concat noise and labels adjacent"""
-                #tensor1 = torch.cat((conditional_data.to(device),tensorA.to(device),latent_tensor.to(device),)) #concat side
 
-                #preparing noise in the right format to be sent for generation
-                tensor2 = tensor1.unsqueeze(1).unsqueeze(1).unsqueeze(1).to(device)
-                tensor3 = tensor2.permute(1,0,2,3)
-                noise = torch.cat((noise.to(device),tensor3.to(device)),0)
+                pass
 
-                array1.append(tensor1.to(device))
+    return array1, array_labels, noise,bands_batch
 
-    return array1, array2, noise,bands_batch
-
-def set_conditioning_one_hot(df,name,target,categories,band_name,top_freqs,substrate_encoder,materials_encoder,surfaceType_encoder,TargetGeometries_encoder,bands_encoder):
-    series=name.split('_')[-2]
-    batch=name.split('_')[4]
-    iteration=series.split('-')[-1]
-    row=df[(df['sim_id']==batch) & (df['iteration']==int(iteration))  ]
-        #print(batch)
-        #print(iteration)
-
-    target_val=target
-    category=categories
-    band=band_name
-
-    """"
-    surface type: reflective, transmissive
-    layers: conductor and conductor material / Substrate information
-    """
-    surfacetype=row["type"].values[0]
-        
-    layers=row["layers"].values[0]
-    layers= layers.replace("'", '"')
-    layer=json.loads(layers)
-        
-        
-    if (target_val==2): #is cross. Because an added variable to the desing 
-        
-        sustratoHeight= json.loads(row["paramValues"].values[0])
-        sustratoHeight= sustratoHeight[-2]
-    else:
-    
-        sustratoHeight= json.loads(row["paramValues"].values[0])
-        sustratoHeight= sustratoHeight[-1]
-        
-    materialsustrato=torch.Tensor(substrate_encoder.transform(np.array(Substrates[layer['substrate']['material']]).reshape(-1, 1)).toarray()).squeeze(0)
-    materialconductor=torch.Tensor(materials_encoder.transform(np.array(Materials[layer['conductor']['material']]).reshape(-1, 1)).toarray()).squeeze(0)
-    surface=torch.Tensor(surfaceType_encoder.transform(np.array(Surfacetypes[surfacetype]).reshape(-1, 1)).toarray()).squeeze(0)
-    band=torch.Tensor(bands_encoder.transform(np.array(band).reshape(-1, 1)).toarray()).squeeze(0)
-  
-
-    """[ 1.0000,  0.0000,  1.0000,  0.0000,  1.0000,  0.0000,  0.2520,  0.0000,
-         0.0000,  1.0000,  0.0000,  0.0000,  0.0000, 56.8000, 56.7000, 56.6000]
-         surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight]),band,top_freqs
-         """
-
-    values_array = torch.cat((surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight])),0) #concat side
-    """ Values array solo pouede llenarse con n+umero y no con textos"""
-    # values_array = torch.Tensor(values_array)
-    return values_array
 
 def set_conditioning(df,name,target,categories,band_name,top_freqs):
 
@@ -485,8 +418,9 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         substrateWidth = 5 # 5 mm size
         
 
-    values_array=torch.Tensor([geometry,substrateWidth ,band])
-    
+    values_array=torch.Tensor(geometry)
+    values_array=torch.cat((values_array,torch.Tensor([sustratoHeight,substrateWidth,band ])),0)
+       
     """if wanting to add top frequencies to the conditions"""
     #values_array = torch.cat((values_array,top_freqs),0) #concat side
 
@@ -524,9 +458,11 @@ def train_discriminator(modelD,modelG,criterion,real_images, opt_d,label_conditi
     else:
         fake = modelG( generator_noise)
 
+
     label.fill_(fake_label)
-    #if random.uniform(0.0,1)<0.1:
-    #    label.fill_(real_label)
+
+    if random.uniform(0.0,1)<0.1:
+        label.fill_(real_label)
 
     # Clasifica todos los batch falsos con NetD
     output2 = modelD.forward(fake.detach(),label_conditions, batch_size).view(-1)
@@ -553,11 +489,6 @@ def train_generator(opt_g,net_g, net_d,batch_size,criterion,fakes,noise2, label,
     # Generate fake images
 
     label.fill_(real_label)
-    """Testing swapping fake and real labels for generator"""
-    #if random.uniform(0.0,1)<0.1:
-    #    label.fill_(fake_label)
-
-     #saying fake label
 
     output = net_d.forward(fakes,noise2, batch_size).view(-1)
 
@@ -594,16 +525,14 @@ def main():
     
 
     #one hot encoders in case needed
-    substrate_encoder=encoders(Substrates)
-    materials_encoder=encoders(Materials)
-    surfaceType_encoder=encoders(Surfacetypes)
-    TargetGeometries_encoder=encoders(TargetGeometries)
-    bands_encoder=encoders(Bands)
+    # substrate_encoder=encoders(Substrates)
+    # materials_encoder=encoders(Materials)
+    # surfaceType_encoder=encoders(Surfacetypes)
+    # TargetGeometries_encoder=encoders(TargetGeometries)
+    # bands_encoder=encoders(Bands)
 
     # Trainer object (look something to reasses)
     trainer = Stack.Trainer(parser)
-
-    
 
     use_GANV2=parser.GAN_version
 
@@ -614,7 +543,8 @@ def main():
         initial_depth = 512
         generator_mapping_size=64
 
-        netG = Stack.Generator_V2(trainer.gpu_number,
+        netG = Stack.Generator_V2(parser.image_size,
+                                  trainer.gpu_number,
                                   parser.spectra_length+parser.condition_len,
                                   parser.latent, generator_mapping_size,
                                   initial_depth,
@@ -624,27 +554,18 @@ def main():
         netG.cuda()
     else:
 
-        # Sizes for discrimnator and generator
-        """Z product"""
-        #input_size=parser.spectra_length+parser.condition_len
-        
-        """this for Z concat"""
-        input_size=parser.spectra_length+parser.condition_len+parser.latent
-
-        generator_mapping_size=64
-        # Create models
-        """leakyRelu_flag=False use leaky 
-        flag=True use Relu"""
-        netG = Stack.Generator(trainer.gpu_number, input_size, generator_mapping_size, parser.output_channels,leakyRelu_flag=False)
-        netG.apply(weights_init)
-        netG.cuda()
+        pass
 
 
     #depth of feature maps propagated through the discriminator
 
     discriminator_mapping_size=32
 
-    netD = Stack.Discriminator(parser.condition_len+parser.spectra_length,trainer.gpu_number, parser.image_size, discriminator_mapping_size, parser.discriminator_channels)
+    netD = Stack.Discriminator_V2(parser.condition_len+parser.spectra_length,
+                               trainer.gpu_number, 
+                               parser.image_size, 
+                               discriminator_mapping_size, 
+                               parser.discriminator_channels)
     netD.cuda()
     netD.apply(weights_init)
     
@@ -655,25 +576,25 @@ def main():
     criterion = nn.BCELoss()
 
     # Setup Adam optimizers for both G and D
-    #opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.5, 0.999),weight_decay=1e-5)
-    opt_D = optimizer.SGD(netD.parameters(), lr=trainer.learning_rate, momentum=0.7)
-    opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.5, 0.999))
+    opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
+    #opt_D = optimizer.SGD(netD.parameters(), lr=trainer.learning_rate, momentum=0.7)
+    opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999))
     schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=1.00004)
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=1.00004)
     
     #naming the output file
-    date="_GANV2_FWHM_Noswitch_25Ag-lr1-4"
+    date="_GANV2_128_FWHM_ADAM_28Ag"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,
                                                             netD,netG,
                                                             device,
                                                             date,
-                                                            substrate_encoder,
-                                                            materials_encoder,
-                                                            surfaceType_encoder,
-                                                            TargetGeometries_encoder,
-                                                            bands_encoder )
+                                                            None,
+                                                            None,
+                                                            None,
+                                                            None,
+                                                            None )
 
     torch.save(netD.state_dict(), 'NETDModelTM_abs_'+date+'.pth')
     torch.save(netG.state_dict(), 'NETGModelTM_abs_'+date+'.pth')

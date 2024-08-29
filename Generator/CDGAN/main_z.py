@@ -37,12 +37,8 @@ import json
 from PIL import Image
 # Arguments
 parser = argparse.ArgumentParser()
-# boxImagesPath="\\data\\francisco_pizarro\\jorge-cardenas\\data\\MetasufacesData\\Images Jorge Cardenas 512\\"
-# DataPath="\\data\\francisco_pizarro\\jorge-cardenas\\data\\MetasufacesData\\Exports\\output\\"
-# simulationData="\\data\\francisco_pizarro\\jorge-cardenas\\data\\MetasufacesData\\DBfiles\\"
 
 boxImagesPath="../../../data/MetasufacesData/Images-512-Bands/"
-#boxImagesPath="../../../data/MetasufacesData/Images-512-Suband/"
 DataPath="../../../data/MetasufacesData/Exports/output/"
 simulationData="../../../data/MetasufacesData/DBfiles/"
 validationImages="../../../data/MetasufacesData/testImages/"
@@ -172,10 +168,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
             conditions = torch.stack(labels).type(torch.float).to(device) #Discrminator Conditioning Espectro
             
-            #noise = torch.nn.functional.normalize(noise, p=2.0, dim=1, eps=1e-5, out=None)
-
             label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
-            #label_real = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
 
             # Train discriminator
             loss_d,  D_x, D_G_z1, fakes = train_discriminator(netD,netG,criterion,inputs, opt_D, conditions,noise, label, parser.batch_size,real_label,fake_label)
@@ -303,23 +296,6 @@ def prepare_data(names, device,df,classes,classes_types,substrate_encoder, mater
             all_values=torch.from_numpy(values[1])
             all_frequencies=torch.from_numpy(values[0])
 
-            # top 3 values
-            #_, indices  = torch.topk(all_values, 3)
-            #top_frequencies = all_frequencies[indices]
-
-            """12 conditiosn"""
-            # conditional_data = set_conditioning_one_hot(df,
-            #                                     name,
-            #                                     classes[idx],
-            #                                     classes_types[idx],
-            #                                     Bands[str(band_name)],
-            #                                     top_frequencies,
-            #                                     substrate_encoder,
-            #                                     materials_encoder,
-            #                                     surfaceType_encoder,
-            #                                     TargetGeometries_encoder,
-            #                                     bands_encoder)
-
 
             """6 conditions no one-hot-encoding"""
             conditional_data = set_conditioning(df,name,classes[idx],
@@ -352,53 +328,6 @@ def prepare_data(names, device,df,classes,classes_types,substrate_encoder, mater
 
     return array1, array2, noise,bands_batch
 
-def set_conditioning_one_hot(df,name,target,categories,band_name,top_freqs,substrate_encoder,materials_encoder,surfaceType_encoder,TargetGeometries_encoder,bands_encoder):
-    series=name.split('_')[-2]
-    batch=name.split('_')[4]
-    iteration=series.split('-')[-1]
-    row=df[(df['sim_id']==batch) & (df['iteration']==int(iteration))  ]
-        #print(batch)
-        #print(iteration)
-
-    target_val=target
-    category=categories
-    band=band_name
-
-    """"
-    surface type: reflective, transmissive
-    layers: conductor and conductor material / Substrate information
-    """
-    surfacetype=row["type"].values[0]
-        
-    layers=row["layers"].values[0]
-    layers= layers.replace("'", '"')
-    layer=json.loads(layers)
-        
-        
-    if (target_val==2): #is cross. Because an added variable to the desing 
-        
-        sustratoHeight= json.loads(row["paramValues"].values[0])
-        sustratoHeight= sustratoHeight[-2]
-    else:
-    
-        sustratoHeight= json.loads(row["paramValues"].values[0])
-        sustratoHeight= sustratoHeight[-1]
-        
-    materialsustrato=torch.Tensor(substrate_encoder.transform(np.array(Substrates[layer['substrate']['material']]).reshape(-1, 1)).toarray()).squeeze(0)
-    materialconductor=torch.Tensor(materials_encoder.transform(np.array(Materials[layer['conductor']['material']]).reshape(-1, 1)).toarray()).squeeze(0)
-    surface=torch.Tensor(surfaceType_encoder.transform(np.array(Surfacetypes[surfacetype]).reshape(-1, 1)).toarray()).squeeze(0)
-    band=torch.Tensor(bands_encoder.transform(np.array(band).reshape(-1, 1)).toarray()).squeeze(0)
-  
-
-    """[ 1.0000,  0.0000,  1.0000,  0.0000,  1.0000,  0.0000,  0.2520,  0.0000,
-         0.0000,  1.0000,  0.0000,  0.0000,  0.0000, 56.8000, 56.7000, 56.6000]
-         surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight]),band,top_freqs
-         """
-
-    values_array = torch.cat((surface,materialconductor,materialsustrato,torch.Tensor([sustratoHeight])),0) #concat side
-    """ Values array solo pouede llenarse con n+umero y no con textos"""
-    # values_array = torch.Tensor(values_array)
-    return values_array
 
 def set_conditioning(df,name,target,categories,band_name,top_freqs):
 
@@ -536,14 +465,6 @@ def main():
     # prepare settings and dataset
     arguments()
     join_simulationData()
-    
-
-    #one hot encoders in case needed
-    # substrate_encoder=encoders(Substrates)
-    # materials_encoder=encoders(Materials)
-    # surfaceType_encoder=encoders(Surfacetypes)
-    # TargetGeometries_encoder=encoders(TargetGeometries)
-    # bands_encoder=encoders(Bands)
 
     # Trainer object (look something to reasses)
     trainer = Stack.Trainer(parser)
