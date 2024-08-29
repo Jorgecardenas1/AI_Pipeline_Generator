@@ -78,7 +78,7 @@ def arguments():
     parser.add_argument("GAN_version",type=bool)
 
     parser.run_name = "GAN Training"
-    parser.epochs = 150
+    parser.epochs = 110
     parser.batch_size = 64
     parser.workers=1
     parser.gpu_number=0
@@ -88,7 +88,7 @@ def arguments():
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
     parser.learning_rate =1e-4
-    parser.condition_len = 15 
+    parser.condition_len = 15 #without shape conditioning
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=115 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
@@ -420,7 +420,7 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
 
     values_array=torch.Tensor(geometry)
     values_array=torch.cat((values_array,torch.Tensor([sustratoHeight,substrateWidth,band ])),0)
-       
+    #values_array=torch.Tensor([sustratoHeight,substrateWidth,band ])
     """if wanting to add top frequencies to the conditions"""
     #values_array = torch.cat((values_array,top_freqs),0) #concat side
 
@@ -583,7 +583,7 @@ def main():
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=1.00004)
     
     #naming the output file
-    date="_GANV2_128_FWHM_ADAM_28Ag"
+    date="_GANV2_128_FWHM_ADAM_29Ag"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,
