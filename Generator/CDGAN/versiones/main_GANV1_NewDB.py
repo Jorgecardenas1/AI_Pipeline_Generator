@@ -81,7 +81,7 @@ def arguments():
 
     parser.run_name = "GAN Training"
     parser.epochs = 500
-    parser.batch_size = 64
+    parser.batch_size = 50
     parser.workers=1
     parser.gpu_number=0
     parser.output_channels=3
@@ -92,9 +92,9 @@ def arguments():
     parser.learning_rate =1e-4
     parser.condition_len = 14 #without shape conditioning
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
-    parser.latent=300 #this is to be modified when training for different metrics.
+    parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_28Oct_ganV1_64/"
+    parser.output_folder="output_22Oct_ganV1_64/"
     parser.GAN_version=False
 
     categories=["box", "circle", "cross"]
@@ -139,10 +139,6 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
     df = pd.read_csv("out.csv")
     
     
-    dataloader = utils.get_data_with_labels(parser.image_size,parser.image_size,1, 
-                                            boxImagesPath,parser.batch_size,
-                                            drop_last=True,
-                                            filter="30-40")#filter disabled
     
     vdataloader = utils.get_data_with_labels(parser.image_size, parser.image_size,1,
                                             validationImages,parser.batch_size, 
@@ -152,7 +148,10 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
     for epoch in range(parser.epochs):
 
-        
+        dataloader = utils.get_data_with_labels(parser.image_size,parser.image_size,1, 
+                                            boxImagesPath,parser.batch_size,
+                                            drop_last=True,
+                                            filter="30-40")#filter disabled
         
         # For each batch in the dataloader
         # netG.train()
@@ -163,6 +162,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             # y otras de ruido en la parte latente  .
             netG.train()
             inputs, classes, names, classes_types = data
+
 
             #sending to CUDA
             inputs = inputs.to(device) #images 
@@ -186,7 +186,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             
             
             label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
-            label_real = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
+            #label_real = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
 
             # Train discriminator
 
@@ -410,6 +410,7 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         sustratoHeight= sustratoHeight[-1]
         substrateWidth = 5 # 5 mm size
         
+
     values_array=torch.Tensor(geometry)
     values_array=torch.cat((values_array,torch.Tensor([sustratoHeight,substrateWidth ])),0)
     #values_array=torch.Tensor([sustratoHeight,substrateWidth,band ])
@@ -566,7 +567,7 @@ def main():
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=1.00004)
     
     #naming the output file
-    date="_GANV1_64_FWHM_ADAM_28Oct"
+    date="_GANV1_64_FWHM_ADAM_22Oct"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,
