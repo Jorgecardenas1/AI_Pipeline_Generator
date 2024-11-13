@@ -94,7 +94,7 @@ def arguments():
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_13Nov_ganV2_128_optim_2e4_batch64_z400_e800__gamma0999_0.1noise/"
+    parser.output_folder="output_4Nov_ganV2_128_optim_2e4_batch64_z400_e800/"
     parser.GAN_version=True
 
     categories=["box", "circle", "cross"]
@@ -356,8 +356,8 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
             bands_batch.append(band_name)
             array_labels.append(labels) # to create stack of tensors
 
-            latent_tensor=torch.randn(1,parser.latent)
-            #latent_tensor = torch.normal(mean=0.5, std=0.165,size=(1, parser.latent)) #normal en unrango de 0-1
+            #latent_tensor=torch.randn(1,parser.latent)
+            latent_tensor = torch.normal(mean=0.5, std=0.165,size=(1, parser.latent)) #normal en unrango de 0-1
 
             if parser.GAN_version:
                 noise = torch.cat((noise.to(device),latent_tensor.to(device)))
@@ -460,8 +460,8 @@ def train_discriminator(modelD,modelG,criterion,real_images, opt_d,label_conditi
 
     label.fill_(fake_label)
 
-    #if random.uniform(0.0,1)<0.1:
-    #    label.fill_(real_label)
+    if random.uniform(0.0,1)<0.15:
+        label.fill_(real_label)
 
     # Clasifica todos los batch falsos con NetD
     output2 = modelD.forward(fake.detach(),label_conditions, batch_size).view(-1)
@@ -577,12 +577,13 @@ def main():
 
     # Setup Adam optimizers for both G and D
     opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
+    #opt_D = optimizer.SGD(netD.parameters(), lr=trainer.learning_rate, momentum=0.7)
     opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
-    schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=0.999)#1.0004
-    schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.999)
+    schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=1.0004)
+    schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=1.0004)
     
     #naming the output file
-    date="_GANV2_128_FWHM_ADAM_12Nov_ganV2_128_optim_2e4_batch64_z400_e800_gamma0999_0.1noise"
+    date="_GANV2_128_FWHM_ADAM_4Nov_optim_2e4_batch64_z400_e800"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,
