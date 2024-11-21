@@ -94,7 +94,7 @@ def arguments():
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_13Nov_ganV2_128_optim_2e4_batch64_z400_e800__gamma0999_0.1noise/"
+    parser.output_folder="output_20Nov_ganV2_128_optim_2e4_batch64_z400_e800_gamma0.99_0.15_noise_0.2low/"
     parser.GAN_version=True
 
     categories=["box", "circle", "cross"]
@@ -133,7 +133,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
     # convenciones sobre algo real o fake
     # This is required for the discriminator training
     real_label = random.uniform(0.9,1.1)
-    fake_label = random.uniform(0.0,0.2)
+    fake_label = random.uniform(0.0,0.1)
 
     # Load training data set
     df = pd.read_csv("out.csv")
@@ -148,9 +148,9 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                                             drop_last=False,
                                             filter="30-40")
     
-
+    global_similarity=0
     for epoch in range(parser.epochs):
-        
+        epoch_similarity=0
         # For each batch in the dataloader
         # netG.train()
 
@@ -215,7 +215,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             if (iters % 1000 == 0) or ((epoch == parser.epochs-1) and (i == len(dataloader)-1)):
                 with torch.no_grad():
 
-
+                    batch_similarity=[]
                     testTensor = torch.Tensor().to(device)
                         
                     _,data_val = list(enumerate(vdataloader))[0]
@@ -248,18 +248,37 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                     save_image(images, parser.output_folder+str(epoch)+"_"+"ref"+"_"+str(iters)+'.png')
 
                     for i, real_image in enumerate(images):
-                        similarity = torch.nn.CosineSimilarity(dim=0)(real_image,fake[i,::]) 
-                        print("similarity_"+str(i)+"_"+str(epoch)+"_"+str(iters)+":",torch. mean(similarity))
+                        similarity = torch.nn.CosineSimilarity(dim=0)(torch.flatten(real_image),torch.flatten(fake[i,::])) 
+                        batch_similarity.append(similarity)
+                        print("similarity_"+str(i)+"_"+str(epoch)+"_"+str(iters)+":",similarity)
+                    
+                    epoch_similarity = torch.mean(torch.stack(batch_similarity))
+
+                    if not os.path.exists(parser.output_folder+'/model'):
+                        os.makedirs(parser.output_folder+'/model')
+                        
+                    if epoch_similarity > global_similarity:
+
+                        global_similarity = epoch_similarity
+
+                        torch.save(netG, parser.output_folder+'/model' + 'netG' + str(epoch) + '.pt')
+                        torch.save(netD, parser.output_folder+'/model' + 'netD' + str(epoch) + '.pt')
+
+
 
             iters += 1
 
-        if epoch % 100 == 0:
-            ##Guarda el modelo en el directorio cada 50 epocas
-            if not os.path.exists(parser.output_folder+'/model'):
-                os.makedirs(parser.output_folder+'/model')
+        # if epoch % 100 == 0:
+        #     ##Guarda el modelo en el directorio cada 50 epocas
+        #     if not os.path.exists(parser.output_folder+'/model'):
+        #         os.makedirs(parser.output_folder+'/model')
+            
+        #     if epoch_similarity > global_similarity:
 
-            torch.save(netG, parser.output_folder+'/model' + 'netG' + str(epoch) + '.pt')
-            torch.save(netD, parser.output_folder+'/model' + 'netD' + str(epoch) + '.pt')
+        #         global_similarity = epoch_similarity
+
+        #         torch.save(netG, parser.output_folder+'/model' + 'netG' + str(epoch) + '.pt')
+        #         torch.save(netD, parser.output_folder+'/model' + 'netD' + str(epoch) + '.pt')
 
             
     
@@ -440,7 +459,7 @@ def train_discriminator(modelD,modelG,criterion,real_images, opt_d,label_conditi
     label.fill_(real_label)
     
     if random.uniform(0.0,1)<0.15:
-        label.fill_(fake_label)
+       label.fill_(fake_label)
 
     errD_real = criterion(output, label)
     # Calcula el gradients para NetD en backward passxs
@@ -488,6 +507,7 @@ def train_generator(opt_g,net_g, net_d,batch_size,criterion,fakes,noise2, label,
     # Generate fake images
 
     label.fill_(real_label)
+
 
     output = net_d.forward(fakes,noise2, batch_size).view(-1)
 
@@ -578,11 +598,11 @@ def main():
     # Setup Adam optimizers for both G and D
     opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
     opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
-    schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=0.999)#1.0004
-    schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.999)
+    schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=0.99)#1.0004
+    schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.99)
     
     #naming the output file
-    date="_GANV2_128_FWHM_ADAM_12Nov_ganV2_128_optim_2e4_batch64_z400_e800_gamma0999_0.1noise"
+    date="_GANV2_128_FWHM_ADAM_20Nov_ganV2_128_optim_2e4_batch64_z400_e800_gamma0.99_0.15_noise_0.2low"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,
