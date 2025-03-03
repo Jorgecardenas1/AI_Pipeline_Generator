@@ -47,10 +47,10 @@ from PIL import Image
 
 parser = argparse.ArgumentParser()
 
-boxImagesPath="../../data/MetasurfacesDataV3/Images-512-Bands/"
-DataPath="../../data/MetasurfacesDataV3/Exports/output/"
-simulationData="../../data/MetasurfacesDataV3/DBfiles/"
-validationImages="../../data/MetasurfacesDataV3/testImages/"
+boxImagesPath="../../data/MetasurfacesDataV3Reduced/Images-512-Bands/"
+DataPath="../../data/MetasurfacesDataV3Reduced/Exports/output/"
+simulationData="../../data/MetasurfacesDataV3Reduced/DBfiles/"
+validationImages="../../data/MetasurfacesDataV3Reduced/testImages/"
 
 
 Substrates={"Rogers RT/duroid 5880 (tm)":0, "other":1}
@@ -83,7 +83,7 @@ def arguments():
 
     parser.run_name = "GAN Training"
     parser.epochs = 400 
-    parser.batch_size = 32
+    parser.batch_size = 64
     parser.workers=1
     parser.gpu_number=0
     parser.output_channels=3
@@ -92,11 +92,11 @@ def arguments():
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
     parser.learning_rate =1e-4 #Anterior: 2e-4
-    parser.condition_len = 10 #without shape conditioning
+    parser.condition_len = 14 #without shape conditioning
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_3Mar_ganV2_HighAbs_noGeom/"
+    parser.output_folder="output_3Mar_ganV2_reducedSet_1e4/"
     parser.GAN_version=True
 
 
@@ -185,7 +185,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                 noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
                 label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
 
-                #label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
+                label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
 
                 # Train discriminator
                 loss_d,  D_x, D_G_z1, fakes = train_discriminator(netD,netG,criterion,inputs, opt_D, label_conditions,noise, label, parser.batch_size,real_label,fake_label)
@@ -421,9 +421,9 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         substrateWidth = json.loads(row["paramValues"].values[0])[-1] # from the simulation crosses have this additional free param
         
 
-    #values_array=torch.Tensor(geometry)
-    #values_array=torch.cat((values_array,torch.Tensor([sustratoHeight ])),0)
-    values_array=torch.Tensor([sustratoHeight ])
+    values_array=torch.Tensor(geometry)
+    values_array=torch.cat((values_array,torch.Tensor([sustratoHeight ])),0)
+    #values_array=torch.Tensor([sustratoHeight ])
     """if wanting to add top frequencies to the conditions"""
     #values_array = torch.cat((values_array,top_freqs),0) #concat side
     #print(values_array)
@@ -525,7 +525,7 @@ def encoders(dictionary):
 def main():
 
     #naming the output file
-    date="_GAN_3Mar_ganV2_HighAbs_noGeom"
+    date="_GAN_3Mar_ganV2_reducedSet_1e4"
     
     # Get available devices
     os.environ["PYTORCH_USE_CUDA_DSA"] = "1"
