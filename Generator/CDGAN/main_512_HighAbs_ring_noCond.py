@@ -44,13 +44,16 @@ import argparse
 import json
 from PIL import Image
 # Arguments
-
 parser = argparse.ArgumentParser()
+# boxImagesPath="\\data\\francisco_pizarro\\jorge-cardenas\\data\\MetasufacesData\\Images Jorge Cardenas 512\\"
+# DataPath="\\data\\francisco_pizarro\\jorge-cardenas\\data\\MetasufacesData\\Exports\\output\\"
+# simulationData="\\data\\francisco_pizarro\\jorge-cardenas\\data\\MetasufacesData\\DBfiles\\"
 
-boxImagesPath="../../data/MetasurfacesDataV3/Images-512-Bands/"
-DataPath="../../data/MetasurfacesDataV3/Exports/output/"
-simulationData="../../data/MetasurfacesDataV3/DBfiles/"
-validationImages="../../data/MetasurfacesDataV3/testImages/"
+boxImagesPath="../../data/MetasurfacesDataV3RESNET/Images-512-Bands/"
+#boxImagesPath="../../../data/MetasufacesData/Images-512-Suband/"
+DataPath="../../data/MetasurfacesDataV3RESNET/Exports/output/"
+simulationData="../../data/MetasurfacesDataV3RESNET/DBfiles/"
+validationImages="../../data/MetasurfacesDataV3RESNET/testImages/"
 
 
 Substrates={"Rogers RT/duroid 5880 (tm)":0, "other":1}
@@ -82,7 +85,7 @@ def arguments():
     parser.add_argument("GAN_version",type=bool)
 
     parser.run_name = "GAN Training"
-    parser.epochs = 400 
+    parser.epochs = 200 #Anterior 500
     parser.batch_size = 32
     parser.workers=1
     parser.gpu_number=0
@@ -91,14 +94,13 @@ def arguments():
     parser.image_size = 512
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
-    parser.learning_rate =1e-4 #Anterior: 2e-4
+    parser.learning_rate =2e-5 #Anterior: 2e-4
     parser.condition_len = 10 #without shape conditioning
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_3Mar_ganV2_HighAbs_noGeom/"
+    parser.output_folder="output_31Mar_ganV2_HighAbs_NoGeom/"
     parser.GAN_version=True
-
 
     categories=["box", "circle", "cross"]
 
@@ -154,6 +156,8 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
     global_similarity=0
     for epoch in range(parser.epochs):
         epoch_similarity=0
+        # For each batch in the dataloader
+        # netG.train()
 
         for i, data in enumerate(dataloader, 0):
             # Genera el batch del espectro, vectores latentes, and propiedades
@@ -185,9 +189,10 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                 noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
                 label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
 
-                #label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
+                label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
 
                 # Train discriminator
+
                 loss_d,  D_x, D_G_z1, fakes = train_discriminator(netD,netG,criterion,inputs, opt_D, label_conditions,noise, label, parser.batch_size,real_label,fake_label)
 
                 # Train generator
@@ -234,11 +239,12 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                     
                     if parser.GAN_version:
                         fake = netG(label_conditions,testTensor,parser.batch_size).detach().cpu()
+
                     else:
                         pass
-
-
                     """Saving Data"""
+
+
                     if not os.path.exists(parser.output_folder):
                         os.makedirs(parser.output_folder)
 
@@ -267,6 +273,19 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
             iters += 1
 
+        # if epoch % 100 == 0:
+        #     ##Guarda el modelo en el directorio cada 50 epocas
+        #     if not os.path.exists(parser.output_folder+'/model'):
+        #         os.makedirs(parser.output_folder+'/model')
+            
+        #     if epoch_similarity > global_similarity:
+
+        #         global_similarity = epoch_similarity
+
+        #         torch.save(netG, parser.output_folder+'/model' + 'netG' + str(epoch) + '.pt')
+        #         torch.save(netD, parser.output_folder+'/model' + 'netD' + str(epoch) + '.pt')
+
+            
     
         schedulerD.step()
         schedulerG.step()
@@ -524,9 +543,6 @@ def encoders(dictionary):
 
 def main():
 
-    #naming the output file
-    date="_GAN_3Mar_ganV2_HighAbs_noGeom"
-    
     # Get available devices
     os.environ["PYTORCH_USE_CUDA_DSA"] = "1"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -595,7 +611,8 @@ def main():
     schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=0.99)#1.0004
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.99)
     
-    
+    #naming the output file
+    date="_GAN_31Mar_ganV2_HighAbs_NoGeom"
 
     G_losses,D_losses,iter_array,_,_=train(opt_D,opt_G,schedulerD,schedulerG,
                                                             criterion,

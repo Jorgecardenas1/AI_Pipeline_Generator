@@ -47,10 +47,10 @@ from PIL import Image
 
 parser = argparse.ArgumentParser()
 
-boxImagesPath="../../data/MetasurfacesDataV3/Images-512-Bands/"
-DataPath="../../data/MetasurfacesDataV3/Exports/output/"
-simulationData="../../data/MetasurfacesDataV3/DBfiles/"
-validationImages="../../data/MetasurfacesDataV3/testImages/"
+boxImagesPath="../../data/MetasurfacesDataV3RESNET/Images-512-Bands/"
+DataPath="../../data/MetasurfacesDataV3RESNET/Exports/output/"
+simulationData="../../data/MetasurfacesDataV3RESNET/DBfiles/"
+validationImages="../../data/MetasurfacesDataV3RESNET/testImages/"
 
 
 Substrates={"Rogers RT/duroid 5880 (tm)":0, "other":1}

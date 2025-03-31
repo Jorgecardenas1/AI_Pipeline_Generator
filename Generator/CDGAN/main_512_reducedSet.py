@@ -30,6 +30,7 @@ from torchsummary import summary
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
+from torchmetrics import StructuralSimilarityIndexMeasure
 
 from torchvision import datasets
 import torchvision.transforms as transforms
@@ -82,7 +83,7 @@ def arguments():
     parser.add_argument("GAN_version",type=bool)
 
     parser.run_name = "GAN Training"
-    parser.epochs = 400 
+    parser.epochs = 5 
     parser.batch_size = 64
     parser.workers=1
     parser.gpu_number=0
@@ -96,7 +97,7 @@ def arguments():
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_3Mar_ganV2_reducedSet_1e4/"
+    parser.output_folder="output_11Mar_ganV2_reducedSet/"
     parser.GAN_version=True
 
 
@@ -130,6 +131,8 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
     # Lists to keep track of progress
     img_list,G_losses,D_losses,real_scores,fake_scores,iter_array= [],[],[],[],[],[]
+    
+    ssim = StructuralSimilarityIndexMeasure()
 
     iters = 0
 
@@ -247,12 +250,18 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                     save_image(images, parser.output_folder+str(epoch)+"_"+"ref"+"_"+str(iters)+'.png')
 
                     for i, real_image in enumerate(images):
-                        similarity = torch.nn.CosineSimilarity(dim=0)(torch.flatten(real_image),torch.flatten(fake[i,::])) 
+                        #similarity = torch.nn.CosineSimilarity(dim=0)(torch.flatten(real_image),torch.flatten(fake[i,::])) 
+         
+                        similarity=ssim(real_image.unsqueeze(0), fake[i,::].unsqueeze(0))
                         batch_similarity.append(similarity)
                         print("similarity_"+str(i)+"_"+str(epoch)+"_"+str(iters)+":",similarity)
-                    
+
+                        
                     epoch_similarity = torch.mean(torch.stack(batch_similarity))
 
+                    #print(epoch_similarity)
+
+    
                     if not os.path.exists(parser.output_folder+'/model'):
                         os.makedirs(parser.output_folder+'/model')
                         
@@ -525,7 +534,7 @@ def encoders(dictionary):
 def main():
 
     #naming the output file
-    date="_GAN_3Mar_ganV2_reducedSet_1e4"
+    date="_GAN_11Mar_ganV2_reducedSet"
     
     # Get available devices
     os.environ["PYTORCH_USE_CUDA_DSA"] = "1"

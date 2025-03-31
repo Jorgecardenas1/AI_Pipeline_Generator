@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
+from torchmetrics import StructuralSimilarityIndexMeasure
 
 import torch
 import torch.nn as nn
@@ -82,7 +83,7 @@ def arguments():
     parser.add_argument("GAN_version",type=bool)
 
     parser.run_name = "GAN Training"
-    parser.epochs = 400 
+    parser.epochs = 200 
     parser.batch_size = 64
     parser.workers=1
     parser.gpu_number=0
@@ -91,12 +92,12 @@ def arguments():
     parser.image_size = 512
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
-    parser.learning_rate =1e-4 #Anterior: 2e-4
+    parser.learning_rate =0.5e-4 #Anterior: 2e-4
     parser.condition_len = 14 #without shape conditioning
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_3Mar_ganV2_fullset/"
+    parser.output_folder="output_12Mar_ganV2_fullset_ssim/"
     parser.GAN_version=True
 
 
@@ -130,6 +131,8 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
     # Lists to keep track of progress
     img_list,G_losses,D_losses,real_scores,fake_scores,iter_array= [],[],[],[],[],[]
+
+    ssim = StructuralSimilarityIndexMeasure()
 
     iters = 0
 
@@ -247,7 +250,8 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                     save_image(images, parser.output_folder+str(epoch)+"_"+"ref"+"_"+str(iters)+'.png')
 
                     for i, real_image in enumerate(images):
-                        similarity = torch.nn.CosineSimilarity(dim=0)(torch.flatten(real_image),torch.flatten(fake[i,::])) 
+                        #similarity = torch.nn.CosineSimilarity(dim=0)(torch.flatten(real_image),torch.flatten(fake[i,::])) 
+                        similarity=ssim(real_image.unsqueeze(0), fake[i,::].unsqueeze(0))
                         batch_similarity.append(similarity)
                         print("similarity_"+str(i)+"_"+str(epoch)+"_"+str(iters)+":",similarity)
                     
@@ -525,7 +529,7 @@ def encoders(dictionary):
 def main():
 
     #naming the output file
-    date="_GAN_3Feb_ganV2_Fullset"
+    date="_GAN_12Mar_ganV2_Fullset_ssim"
     
     # Get available devices
     os.environ["PYTORCH_USE_CUDA_DSA"] = "1"

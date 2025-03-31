@@ -1,10 +1,9 @@
-""".py: Training and validation of CDCGAN model."""
+""".py: Training and validation of CDCGAN model
+Final version workin."""
 __author__      = "JORGE H. CARDENAS"
 __copyright__   = "2024,2025"
-__version__   = "2.0"
+__version__   = "3.0"
 
-"""Version 1: Z conditioning with product or concat- initial GAN architechture 
-Version 2: Conditioning with peaks and FWHM GAN V2 Arquitechture"""
 
 import sys
 import os
@@ -47,18 +46,22 @@ from PIL import Image
 
 parser = argparse.ArgumentParser()
 
-boxImagesPath="../../data/MetasurfacesDataV3/Images-512-Bands/"
-DataPath="../../data/MetasurfacesDataV3/Exports/output/"
-simulationData="../../data/MetasurfacesDataV3/DBfiles/"
-validationImages="../../data/MetasurfacesDataV3/testImages/"
 
+#Pointing to the places with dataset
+trainImages="../../data/MetasurfacesDataV3RESNET/Images-512-Bands/"
+DataPath="../../data/MetasurfacesDataV3RESNET/Exports/output/"
+simulationData="../../data/MetasurfacesDataV3RESNET/DBfiles/"
+validationImages="../../data/MetasurfacesDataV3RESNET/testImages/"
 
+#Basic structures
+#These are used to condition the model
 Substrates={"Rogers RT/duroid 5880 (tm)":0, "other":1}
 Materials={"copper":0,"pec":1}
 Surfacetypes={"Reflective":0,"Absorptive":1}
 TargetGeometries={"circ":[1,0,0,0],"cross":[0,1,0,0], "ring":[0,0,1,0],"splitcross":[0,0,0,1]}
 
-#New DB no requiere bandas - todo está entre 75 y 78 GHZ 101 puntos de datos
+#this is considered if we want to extend to 
+#separate dataset by the bands
 Bands={"75-78":0}
 
 
@@ -83,7 +86,7 @@ def arguments():
 
     parser.run_name = "GAN Training"
     parser.epochs = 400 
-    parser.batch_size = 32
+    parser.batch_size = 64
     parser.workers=1
     parser.gpu_number=0
     parser.output_channels=3
@@ -91,16 +94,14 @@ def arguments():
     parser.image_size = 512
     parser.dataset_path = os.path.normpath('/content/drive/MyDrive/Training_Data/Training_lite/')
     parser.device = "cpu"
-    parser.learning_rate =1e-4 #Anterior: 2e-4
-    parser.condition_len = 10 #without shape conditioning
+    parser.learning_rate =1e-4 #
+    parser.condition_len = 14 #changing this as we change condition vector
     parser.metricType='AbsorbanceTM' #this is to be modified when training for different metrics.
     parser.latent=400 #this is to be modified when training for different metrics.
     parser.spectra_length=100 #this is to be modified when training for different metrics.
-    parser.output_folder="output_3Mar_ganV2_HighAbs_noGeom/"
+    parser.output_folder="output_3Mar_ganV2_fullset/" #output folder with images and trained model
     parser.GAN_version=True
 
-
-    categories=["box", "circle", "cross"]
 
 
 #From the DCGAN paper, the authors specify that all smodel weights shall be randomly initialized
@@ -132,6 +133,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
     img_list,G_losses,D_losses,real_scores,fake_scores,iter_array= [],[],[],[],[],[]
 
     iters = 0
+    global_similarity=0
 
     # convenciones sobre algo real o fake
     # This is required for the discriminator training
@@ -140,9 +142,12 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
     # Load training data set
     df = pd.read_csv("out.csv")
+
+
+    #loading dataset
     
     dataloader = utils.get_data_with_labels(parser.image_size,parser.image_size,1, 
-                                            boxImagesPath,parser.batch_size,
+                                            trainImages,parser.batch_size,
                                             drop_last=True,
                                             filter="30-40")#filter disabled
     
@@ -151,25 +156,26 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                                             drop_last=False,
                                             filter="30-40")
     
-    global_similarity=0
+    
     for epoch in range(parser.epochs):
+
         epoch_similarity=0
 
         for i, data in enumerate(dataloader, 0):
+
             # Genera el batch del espectro, vectores latentes, and propiedades
             # Estamos Agregando al vector unas componentes condicionales
             # y otras de ruido en la parte latente  .
             netG.train()
             inputs, classes, names, classes_types = data
 
-
             #sending to CUDA
             inputs = inputs.to(device) #images 
             classes = classes.to(device) #classes
             
             """Prepare Data
-            labels - a full vector with conditions and spectra
-            noise Z"""
+            This method helps to prepare the vectors required for training
+            Latent vector and conditioning vector."""
             _, labels, noise,_ = prepare_data(names, device,df,classes,classes_types,
                                                              substrate_encoder,
                                                              materials_encoder,
@@ -177,7 +183,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                                                              TargetGeometries_encoder,
                                                              bands_encoder)
 
-
+            """Training"""
             if parser.GAN_version:
 
                 label_conditions = torch.stack(labels).type(torch.float).to(device) #Discrminator Conditioning spectra
@@ -185,7 +191,7 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
                 noise = noise.type(torch.float).to(device) #Generator input espectro+ruido
                 label = torch.full((parser.batch_size,), real_label,dtype=torch.float, device=device)
 
-                #label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
+                label_conditions = torch.nn.functional.normalize(label_conditions, p=2.0, dim=1, eps=1e-5, out=None)
 
                 # Train discriminator
                 loss_d,  D_x, D_G_z1, fakes = train_discriminator(netD,netG,criterion,inputs, opt_D, label_conditions,noise, label, parser.batch_size,real_label,fake_label)
@@ -262,9 +268,6 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
 
                         torch.save(netG, parser.output_folder+'/model' + 'netG' + str(epoch) + '.pt')
                         torch.save(netD, parser.output_folder+'/model' + 'netD' + str(epoch) + '.pt')
-
-
-
             iters += 1
 
     
@@ -275,10 +278,13 @@ def train(opt_D,opt_G, schedulerD,schedulerG,criterion,netD,netG,device,PATH ,su
             
 
 def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, materials_encoder,surfaceType_encoder,TargetGeometries_encoder,bands_encoder):
+   
     bands_batch,array1,array_labels=[],[],[]
+    noise = torch.Tensor() #Z tensor
 
-    noise = torch.Tensor()
-
+    """This section is required to look for the absorptance spectra from the 
+    name of the image in the batch.
+    We have to look for each file and create a batch tensor with the spectra."""
     for idx,name in enumerate(files_name):
 
         series=name.split('_')[-2]#
@@ -286,6 +292,8 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
         batch=name.split('_')[4]
         version_batch=1
 
+        #Images have two types of batches that can even change in the future
+        #as we improve the dataset population
         if batch=="v2":
             version_batch=2
             batch=name.split('_')[5]
@@ -313,7 +321,7 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
             all_frequencies=data[0]
             all_frequencies = np.array([(float(i)-min(all_frequencies))/(max(all_frequencies)-min(all_frequencies)) for i in all_frequencies])
 
-            #get top freqencies for top values 
+            #Get the peaks and FHWM values for conditioning
             peaks = find_peaks(values, threshold=0.00001)[0] #indexes of peaks
             results_half = peak_widths(values, peaks, rel_height=0.5) #4 arrays: widths, y position, initial and final x
             results_half = results_half[0]
@@ -345,11 +353,12 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
                     results_half = np.append(results_half,0)
 
 
+
             #labels_peaks=torch.cat((torch.from_numpy(data),torch.from_numpy(fre_peaks)),0)
             """this has 3 peaks and its frequencies-9 entries"""
             labels_peaks=torch.cat((torch.from_numpy(data),torch.from_numpy(fre_peaks),torch.from_numpy(results_half)),0)
 
-            """This has geometric params 6 entries"""
+            """Prepare the conditioning vector with Geometry and other values"""
             conditional_data = set_conditioning(df,name,classes[idx],
                                                 classes_types[idx],
                                                 Bands[str(band_name)],
@@ -362,6 +371,7 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
             bands_batch.append(band_name)
             array_labels.append(labels) # to create stack of tensors
 
+            """create de latent tensor Z """
             latent_tensor=torch.randn(1,parser.latent)
             #latent_tensor = torch.normal(mean=0.5, std=0.165,size=(1, parser.latent)) #normal en unrango de 0-1
 
@@ -375,6 +385,8 @@ def prepare_data(files_name, device,df,classes,classes_types,substrate_encoder, 
 
 
 def set_conditioning(df,name,target,categories,band_name,top_freqs):
+    """From the file with all the information of each sample inthe data set
+    we get all geometric data required."""
 
     #splitting file names to get some parameters
     series=name.split('_')[-2]
@@ -385,16 +397,17 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         
     iteration=series.split('-')[-1]
     row=df[(df['sim_id']==batch) & (df['iteration']==int(iteration))  ]
-    #print(iteration)
-    #print(batch)
+
     target_val=target
     category=categories
     geometry=TargetGeometries[category]
     band=band_name
+
     """"
     surface type: reflective, transmissive
     layers: conductor and conductor material / Substrate information
     """
+
     surfacetype=row["type"].values[0]
     surfacetype=Surfacetypes[surfacetype]
         
@@ -421,18 +434,13 @@ def set_conditioning(df,name,target,categories,band_name,top_freqs):
         substrateWidth = json.loads(row["paramValues"].values[0])[-1] # from the simulation crosses have this additional free param
         
 
-    #values_array=torch.Tensor(geometry)
-    #values_array=torch.cat((values_array,torch.Tensor([sustratoHeight ])),0)
-    values_array=torch.Tensor([sustratoHeight ])
-    """if wanting to add top frequencies to the conditions"""
-    #values_array = torch.cat((values_array,top_freqs),0) #concat side
-    #print(values_array)
-    """ Values array solo pouede llenarse con n+umero y no con textos"""
+    values_array=torch.Tensor(geometry)
+    values_array=torch.cat((values_array,torch.Tensor([sustratoHeight ])),0)
+    
+    #values_array=torch.Tensor([sustratoHeight ])
+    
     values_array = torch.Tensor(values_array)
     
-    
-    #values_array = torch.nn.functional.normalize(values_array, p=2.0, dim=0, eps=1e-5, out=None)
-
     return values_array
 
 
@@ -525,7 +533,7 @@ def encoders(dictionary):
 def main():
 
     #naming the output file
-    date="_GAN_3Mar_ganV2_HighAbs_noGeom"
+    date="_GAN_3Feb_ganV2_Fullset"
     
     # Get available devices
     os.environ["PYTORCH_USE_CUDA_DSA"] = "1"
@@ -536,15 +544,6 @@ def main():
     arguments()
     join_simulationData()
     
-
-    #one hot encoders in case needed
-    # substrate_encoder=encoders(Substrates)
-    # materials_encoder=encoders(Materials)
-    # surfaceType_encoder=encoders(Surfacetypes)
-    # TargetGeometries_encoder=encoders(TargetGeometries)
-    # bands_encoder=encoders(Bands)
-
-    # Trainer object (look something to reasses)
     trainer = Stack.Trainer(parser)
 
     use_GANV2=parser.GAN_version
@@ -590,8 +589,8 @@ def main():
     criterion = nn.BCELoss()
 
     # Setup Adam optimizers for both G and D
-    opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
-    opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.999),weight_decay=1e-5)
+    opt_D = optimizer.Adam(netD.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.99),weight_decay=1e-5)
+    opt_G = optimizer.Adam(netG.parameters(), lr=trainer.learning_rate, betas=(0.8, 0.99),weight_decay=1e-5)
     schedulerD = torch.optim.lr_scheduler.ExponentialLR(opt_D, gamma=0.99)#1.0004
     schedulerG = torch.optim.lr_scheduler.ExponentialLR(opt_G, gamma=0.99)
     
